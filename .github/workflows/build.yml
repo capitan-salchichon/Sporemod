@@ -1,0 +1,60 @@
+name: build
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Clone Spore ModAPI SDK
+        shell: pwsh
+        run: git clone --depth 1 https://github.com/Spore-Community/Spore-ModAPI.git sdk
+
+      - uses: microsoft/setup-msbuild@v2
+
+      # The SDK's "Release" (static) configuration asks for toolset v145; the runner has VS 2022 (v143).
+      - name: Build SDK static library (SporeModAPIBase.lib)
+        shell: pwsh
+        run: msbuild "sdk\Spore ModAPI\Spore ModAPI.vcxproj" /p:Configuration=Release /p:Platform=Win32 /p:PlatformToolset=v143 /m /v:minimal /flp:"logfile=sdk-static.log;verbosity=normal"
+
+      - name: Build SDK DLL and import library (SporeModAPI.lib)
+        shell: pwsh
+        run: msbuild "sdk\Spore ModAPI\Spore ModAPI.vcxproj" /p:Configuration="Release DLL" /p:Platform=Win32 /p:PlatformToolset=v143 /m /v:minimal /flp:"logfile=sdk-dll.log;verbosity=normal"
+
+      - name: Prepare launcher layout and SdkPathConfig.props
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force launcher\coreLibs, launcher\mLibs | Out-Null
+          Copy-Item sdk\dll\Release\SporeModAPI.lib launcher\coreLibs\
+          Get-ChildItem sdk\lib\Release, sdk\dll\Release, launcher\coreLibs | Format-Table Name, Length
+          @'
+          <?xml version="1.0" encoding="utf-8"?>
+          <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+            <PropertyGroup Label="UserMacros">
+              <SporeSdkPath>$(MSBuildThisFileDirectory)sdk\</SporeSdkPath>
+              <SporeLauncherPath>$(MSBuildThisFileDirectory)launcher\</SporeLauncherPath>
+            </PropertyGroup>
+          </Project>
+          '@ | Set-Content -Encoding utf8 SdkPathConfig.props
+
+      - name: Build TribalChiefObserver (Release|Win32)
+        shell: pwsh
+        run: msbuild TribalChiefObserver.vcxproj /p:Configuration=Release /p:Platform=Win32 /m /v:minimal /flp:"logfile=mod.log;verbosity=normal"
+
+      - name: Show produced DLL
+        shell: pwsh
+        run: Get-ChildItem launcher\mLibs | Format-Table Name, Length
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: TribalChiefObserver
+          path: |
+            launcher/mLibs/*.dll
+            launcher/mLibs/*.pdb
+            *.log
+          if-no-files-found: warn

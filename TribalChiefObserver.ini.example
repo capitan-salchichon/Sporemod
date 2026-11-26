@@ -1,0 +1,25 @@
+; TribalChiefObserver.ini
+; Copy this file to "TribalChiefObserver.ini", next to TribalChiefObserver.dll (ModAPI Launcher "mLibs" folder).
+; Without a valid thunk_address + expected_bytes the mod runs in PROBE MODE: it installs NO detour and only logs.
+
+[Observer]
+; Address of ForwardWalkTree in YOUR executable, as the virtual address of the image linked at 0x400000
+; (the address Ghidra / IDA show). The decompilation address 0x00D995F0 belongs to another build of SporeApp.exe
+; and must NOT be assumed valid for your executable. Hex, with or without 0x.
+thunk_address=
+
+; The first bytes of that function in your executable, as hex (at least 16 bytes), e.g. "AA BB CC ...".
+; The detour is attached only if the bytes found in memory are identical. Set probe_bytes below to dump them to the log.
+expected_bytes=
+
+; Number of bytes at thunk_address written to the log for manual verification (0..64).
+probe_bytes=32
+
+; Seconds between statistics lines (milliseconds, minimum 1000).
+stats_interval_ms=10000
+
+; Maximum number of event lines (tribe/leader changes, detections, mode changes) per session.
+max_event_lines=200
+
+; Log file name (relative to the DLL folder) or a full path.
+log_file=TribalChiefObserver.log
