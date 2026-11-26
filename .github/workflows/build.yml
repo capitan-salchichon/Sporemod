@@ -25,11 +25,12 @@ jobs:
         shell: pwsh
         run: msbuild "sdk\Spore ModAPI\Spore ModAPI.vcxproj" /p:Configuration=Release /p:Platform=Win32 /p:PlatformToolset=v143 /m /v:minimal /flp:"logfile=sdk-static.log;verbosity=normal"
 
+      # Same settings as the SDK's own CI (target BuildCombinedDll): EXECUTABLE_TYPE=10 selects addresses at runtime.
       - name: Build SDK DLL and import library (SporeModAPI.lib)
         id: sdkdll
         continue-on-error: true
         shell: pwsh
-        run: msbuild "sdk\Spore ModAPI\Spore ModAPI.vcxproj" /p:Configuration="Release DLL" /p:Platform=Win32 /p:PlatformToolset=v143 /m /v:minimal /flp:"logfile=sdk-dll.log;verbosity=normal"
+        run: msbuild "sdk\Spore ModAPI\Spore ModAPI.vcxproj" /p:Configuration="Release DLL" /p:Platform=Win32 /p:PlatformToolset=v143 /p:SDK_BUILD_VER=1 /p:EXECUTABLE_TYPE=10 /m /v:minimal /flp:"logfile=sdk-dll.log;verbosity=normal"
 
       - name: Prepare launcher layout and SdkPathConfig.props
         shell: pwsh
