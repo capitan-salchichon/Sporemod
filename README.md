@@ -12,12 +12,13 @@ y no usa `SetAvatar`.
 | Lógica pura (`ObserverCore.h`): parseo, verificación, identificación, límites de log | **Probada**: 51 comprobaciones con `g++` + ASan/UBSan (`tests/run_tests.sh`) |
 | Pegamento (`ChiefObserver.cpp`) | **Simulado en Linux** con sustitutos mínimos de Windows/ModAPI (`tests/run_mock_tests.sh`, 9 escenarios) |
 | Compilación a objeto con clang (x86, Windows) contra los headers **reales** de ModAPI | **Realizada**: los 3 `.cpp` generan `.o` sin errores ni avisos propios (`tests/clang_compile_check.sh`; ajustes solo en copias temporales, listados en el script) |
-| Compilación con MSVC + ModAPI SDK y enlazado (`SporeModAPI.lib`, `detours.lib`) | **NO realizada**: el entorno no tiene Windows ni MSVC, y esas librerías no se pueden construir aquí |
+| Compilación y enlazado con **MSVC** (GitHub Actions, `windows-2022`, VS 2022, MSVC 14.44.35207) | **Realizada**: SDK de ModAPI construido, mod compilado y enlazado con 0 errores y sin avisos del compilador en mis archivos; `TribalChiefObserver.dll` x86 de 56 832 bytes (`build/` y release `ci-4` del repositorio) |
+| Pruebas unitarias de `ObserverCore.h` compiladas con MSVC | **51 comprobaciones, 0 fallos** |
 | Dirección real de `ForwardWalkTree` en tu ejecutable | **NO verificada** (ver más abajo) |
 | Ejecución dentro de Spore | **NO realizada** |
 
-Lo que la simulación NO demuestra: que las firmas de ModAPI compilen tal cual en tu SDK, que el hook funcione en el
-ejecutable real o que el puntero del cacique coincida en el juego real. Eso requiere compilar y ejecutar.
+Lo que la simulación y la compilación NO demuestran: que el hook funcione en el ejecutable real o que el puntero del cacique
+coincida en el juego real. Eso solo se comprueba ejecutando Spore.
 
 ## Archivos
 
@@ -28,7 +29,9 @@ ejecutable real o que el puntero del cacique coincida en el juego real. Eso requ
 | `ObserverCore.h` | Lógica sin dependencias (probada) |
 | `TribalChiefObserver.vcxproj` | Proyecto derivado de la plantilla (`v143`, `detours.lib`, `SporeModAPIBase.lib`, `SporeModAPI.lib`) |
 | `TribalChiefObserver.ini.example` | Configuración |
-| `tests/` | Pruebas unitarias y simulación en Linux |
+| `tests/` | Pruebas unitarias, simulación en Linux y comprobación con clang |
+| `.github/workflows/build.yml` | CI: construye el SDK de ModAPI, compila y enlaza el mod, ejecuta las pruebas y publica la DLL como pre-release |
+| `build/TribalChiefObserver.dll` | DLL compilada por la CI (Release, Win32) |
 
 No existía ningún proyecto de mod previo (no se subió ninguno y no hay ninguno en el entorno), así que el proyecto se creó
 desde la estructura de la plantilla oficial. Si ya tienes uno, hay que integrar estos archivos en él en vez de usar este `.vcxproj`.
@@ -117,3 +120,12 @@ sh tests/run_tests.sh        # lógica pura
 sh tests/run_mock_tests.sh   # simulación del pegamento (requiere g++)
 sh tests/clang_compile_check.sh /ruta/a/Spore-ModAPI   # compilación a objeto contra los headers reales (requiere python3/pip)
 ```
+
+## Compilación automática (GitHub Actions)
+
+`.github/workflows/build.yml` (runner `windows-2022`) clona `Spore-Community/Spore-ModAPI`, construye `SporeModAPIBase.lib` y
+`SporeModAPI.dll`/`.lib` (con `EXECUTABLE_TYPE=10`, igual que la CI del propio SDK), genera `SdkPathConfig.props`,
+compila el mod, ejecuta las pruebas unitarias con MSVC y publica la DLL como pre-release.
+La DLL enlaza estáticamente `SporeModAPIBase.lib` y `detours.lib`, e importa de `SporeModAPI.dll` solo:
+`cGameNounManager_addresses::Get`, `IMessageManager_addresses::Get`, `baseAddress`, `AddPostInitFunction` y `AddDisposeFunction`.
+En el juego se usa el `SporeModAPI.dll` de tu launcher, no el construido por la CI.
