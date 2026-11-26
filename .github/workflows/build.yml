@@ -7,6 +7,8 @@ on:
 jobs:
   build:
     runs-on: windows-2022
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -18,19 +20,22 @@ jobs:
 
       # The SDK's "Release" (static) configuration asks for toolset v145; the runner has VS 2022 (v143).
       - name: Build SDK static library (SporeModAPIBase.lib)
+        id: sdkstatic
+        continue-on-error: true
         shell: pwsh
         run: msbuild "sdk\Spore ModAPI\Spore ModAPI.vcxproj" /p:Configuration=Release /p:Platform=Win32 /p:PlatformToolset=v143 /m /v:minimal /flp:"logfile=sdk-static.log;verbosity=normal"
 
       - name: Build SDK DLL and import library (SporeModAPI.lib)
+        id: sdkdll
+        continue-on-error: true
         shell: pwsh
         run: msbuild "sdk\Spore ModAPI\Spore ModAPI.vcxproj" /p:Configuration="Release DLL" /p:Platform=Win32 /p:PlatformToolset=v143 /m /v:minimal /flp:"logfile=sdk-dll.log;verbosity=normal"
 
       - name: Prepare launcher layout and SdkPathConfig.props
         shell: pwsh
+        continue-on-error: true
         run: |
           New-Item -ItemType Directory -Force launcher\coreLibs, launcher\mLibs | Out-Null
-          Copy-Item sdk\dll\Release\SporeModAPI.lib launcher\coreLibs\
-          Get-ChildItem sdk\lib\Release, sdk\dll\Release, launcher\coreLibs | Format-Table Name, Length
           @'
           <?xml version="1.0" encoding="utf-8"?>
           <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
@@ -40,14 +45,39 @@ jobs:
             </PropertyGroup>
           </Project>
           '@ | Set-Content -Encoding utf8 SdkPathConfig.props
+          Copy-Item sdk\dll\Release\SporeModAPI.lib launcher\coreLibs\
 
       - name: Build TribalChiefObserver (Release|Win32)
+        id: mod
+        continue-on-error: true
         shell: pwsh
         run: msbuild TribalChiefObserver.vcxproj /p:Configuration=Release /p:Platform=Win32 /m /v:minimal /flp:"logfile=mod.log;verbosity=normal"
 
       - name: Show produced DLL
+        continue-on-error: true
         shell: pwsh
         run: Get-ChildItem launcher\mLibs | Format-Table Name, Length
+
+      - name: Publish log excerpts to branch ci-logs
+        if: always()
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force logrepo | Out-Null
+          foreach ($f in Get-ChildItem *.log) {
+            $name = $f.BaseName
+            Select-String -Path $f.FullName -Pattern 'error|fatal|LNK[0-9]+|warning C4' |
+              Select-Object -First 400 | ForEach-Object { $_.Line.Trim() } | Set-Content "logrepo\$name.errors.txt" -Encoding utf8
+            Get-Content $f.FullName -Tail 80 | Set-Content "logrepo\$name.tail.txt" -Encoding utf8
+            if ($f.Length -lt 20MB) { Copy-Item $f.FullName "logrepo\$($f.Name)" }
+          }
+          Get-ChildItem sdk\lib, sdk\dll, launcher -Recurse -File -ErrorAction SilentlyContinue | Select-Object FullName, Length | Format-Table -AutoSize | Out-String -Width 250 | Set-Content logrepo\files.txt -Encoding utf8
+          "steps: sdkstatic=${{ steps.sdkstatic.outcome }} sdkdll=${{ steps.sdkdll.outcome }} mod=${{ steps.mod.outcome }}" | Set-Content logrepo\outcome.txt
+          Push-Location logrepo
+          git init -b ci-logs
+          git config user.name "ci"; git config user.email "ci@example.invalid"
+          git add -A; git commit -m "logs for run ${{ github.run_id }}"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" ci-logs
+          Pop-Location
 
       - uses: actions/upload-artifact@v4
         if: always()
