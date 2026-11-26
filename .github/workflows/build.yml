@@ -12,6 +12,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x86
+
+      - name: Unit tests of ObserverCore.h (MSVC)
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          cl /nologo /EHsc /W4 /std:c++14 tests\test_core.cpp /Fe:test_core.exe 2>&1 | Tee-Object -FilePath unit-tests.log
+          .\test_core.exe 2>&1 | Tee-Object -FilePath unit-tests.log -Append
+
       - name: Clone Spore ModAPI SDK
         shell: pwsh
         run: git clone --depth 1 https://github.com/Spore-Community/Spore-ModAPI.git sdk
@@ -58,6 +69,18 @@ jobs:
         continue-on-error: true
         shell: pwsh
         run: Get-ChildItem launcher\mLibs | Format-Table Name, Length
+
+      - name: Publish DLL as a pre-release asset
+        if: success()
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "ci-${{ github.run_number }}"
+          Copy-Item launcher\mLibs\TribalChiefObserver.dll .
+          gh release create $tag TribalChiefObserver.dll TribalChiefObserver.ini.example --prerelease `
+            --title "TribalChiefObserver CI build ${{ github.run_number }}" `
+            --notes "Prototype 0.1 (observer only). Built by CI from commit ${{ github.sha }} with MSVC. Not yet tested inside Spore."
 
       - name: Publish log excerpts to branch ci-logs
         if: always()
