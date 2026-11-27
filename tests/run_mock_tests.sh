@@ -11,12 +11,13 @@ mkdir -p "$OUT"
 sed -e 's|^#include "stdafx.h"|#include "mock_stdafx.h"|' \
     -e '/^#include <Spore\\/d' \
     -e '/^#include <share.h>/d' \
+    -e 's|void CitizenUpdate_detour::DETOUR(|template<> void member_detour_<CitizenUpdate_detour, Simulator::cCreatureCitizen, Simulator::cCreatureCitizen, void(int)>::detoured(|' \
     -e 's|void ForwardWalkTree_detour::DETOUR(|template<> void static_detour_<ForwardWalkTree_detour, void(float, double, void*, void*, void*, void*, void*, void*)>::detoured(|' \
     "$PROJ/ChiefObserver.cpp" > "$OUT/ChiefObserver.transformed.cpp"
 cp "$HERE/mock/mock_env.h" "$HERE/mock/mock_stdafx.h" "$HERE/mock/mock_main.cpp" "$PROJ/ObserverCore.h" "$PROJ/ChiefObserver.h" "$OUT/"
 g++ -std=c++14 -Wall -Wextra -Wno-sign-compare -Wno-unused-parameter -Wno-unused-function -I"$OUT" "$OUT/mock_main.cpp" -o "$OUT/mock_main"
 status=0
-for s in probe nobytes short badbytes outside nonexec basemismatch verified budget; do
+for s in update probe nobytes short badbytes outside nonexec basemismatch verified budget; do
     echo "== $s"
     "$OUT/mock_main" "$s" || status=1
 done

@@ -1,8 +1,15 @@
 ; TribalChiefObserver.ini
 ; Copy this file to "TribalChiefObserver.ini", next to TribalChiefObserver.dll (ModAPI Launcher "mLibs" folder).
-; Without a valid thunk_address + expected_bytes the mod runs in PROBE MODE: it installs NO detour and only logs.
+; The file is optional: without it the mod hooks cCreatureCitizen::Update using ModAPI's own address table.
 
 [Observer]
+; What to hook:
+;   update (default) - cCreatureCitizen::Update, address provided by ModAPI (no configuration needed)
+;   thunk            - ForwardWalkTree; needs thunk_address + expected_bytes below, otherwise nothing is installed
+;   none             - install nothing (probe mode, only logs)
+hook_target=update
+
+; ---- only used when hook_target=thunk ----
 ; Address of ForwardWalkTree in YOUR executable, as the virtual address of the image linked at 0x400000
 ; (the address Ghidra / IDA show). The decompilation address 0x00D995F0 belongs to another build of SporeApp.exe
 ; and must NOT be assumed valid for your executable. Hex, with or without 0x.

@@ -62,15 +62,16 @@ int main(int argc, char** argv)
 	Det::test_original = MockOriginal;
 
 	if (scenario == "probe") {
-		std::printf("scenario probe (no .ini)\n");
+		std::printf("scenario probe (hook_target=none)\n");
+		WriteIni("hook_target=none\n");
 		ChiefObserver::Attach(nullptr);
 		std::string log = ReadFile(kLog);
 		EXPECT(Count(log, "PROBE MODE") == 1, "probe mode announced");
-		EXPECT(Det::attached_address == 0, "no detour attached without address");
+		EXPECT(Det::attached_address == 0 && CitizenUpdate_detour::attached_address == 0, "no detour attached in probe mode");
 	}
 	else if (scenario == "nobytes") {
 		std::printf("scenario nobytes\n");
-		WriteIni("thunk_address=0x401000\n");
+		WriteIni("hook_target=thunk\nthunk_address=0x401000\n");
 		ChiefObserver::Attach(nullptr);
 		std::string log = ReadFile(kLog);
 		EXPECT(Count(log, "NO_EXPECTED_BYTES") == 1, "missing expected_bytes reported");
@@ -81,7 +82,7 @@ int main(int argc, char** argv)
 		std::printf("scenario badbytes\n");
 		std::string good = FakeThunkHex(16);
 		std::string bad = good; bad[0] = (bad[0] == 'A') ? 'B' : 'A';
-		WriteIni("thunk_address=0x401000\nexpected_bytes=" + bad + "\n");
+		WriteIni("hook_target=thunk\nthunk_address=0x401000\nexpected_bytes=" + bad + "\n");
 		ChiefObserver::Attach(nullptr);
 		std::string log = ReadFile(kLog);
 		EXPECT(Count(log, "MISMATCH") >= 1, "wrong bytes detected");
@@ -89,14 +90,14 @@ int main(int argc, char** argv)
 	}
 	else if (scenario == "short") {
 		std::printf("scenario short expected_bytes\n");
-		WriteIni("thunk_address=0x401000\nexpected_bytes=" + FakeThunkHex(8) + "\n");
+		WriteIni("hook_target=thunk\nthunk_address=0x401000\nexpected_bytes=" + FakeThunkHex(8) + "\n");
 		ChiefObserver::Attach(nullptr);
 		EXPECT(Count(ReadFile(kLog), "EXPECTED_TOO_SHORT") == 1, "8 bytes are not enough");
 		EXPECT(Det::attached_address == 0, "no detour attached");
 	}
 	else if (scenario == "outside") {
 		std::printf("scenario outside\n");
-		WriteIni("thunk_address=0x410000\nexpected_bytes=" + FakeThunkHex(16) + "\n");
+		WriteIni("hook_target=thunk\nthunk_address=0x410000\nexpected_bytes=" + FakeThunkHex(16) + "\n");
 		ChiefObserver::Attach(nullptr);
 		EXPECT(Count(ReadFile(kLog), "outside the main module") == 1, "address outside the image rejected");
 		EXPECT(Det::attached_address == 0, "no detour attached");
@@ -104,23 +105,69 @@ int main(int argc, char** argv)
 	else if (scenario == "nonexec") {
 		std::printf("scenario non-executable memory\n");
 		Win().executable = false;
-		WriteIni("thunk_address=0x401000\nexpected_bytes=" + FakeThunkHex(16) + "\n");
+		WriteIni("hook_target=thunk\nthunk_address=0x401000\nexpected_bytes=" + FakeThunkHex(16) + "\n");
 		ChiefObserver::Attach(nullptr);
 		EXPECT(Count(ReadFile(kLog), "not readable executable memory") == 1, "non-executable memory rejected");
 		EXPECT(Det::attached_address == 0, "no detour attached");
 	}
 	else if (scenario == "basemismatch") {
 		std::printf("scenario ModAPI base mismatch\n");
-		WriteIni("thunk_address=0x401000\nexpected_bytes=" + FakeThunkHex(16) + "\n");
+		WriteIni("hook_target=thunk\nthunk_address=0x401000\nexpected_bytes=" + FakeThunkHex(16) + "\n");
 		baseAddress += 0x1000;
 		ChiefObserver::Attach(nullptr);
 		EXPECT(Count(ReadFile(kLog), "differs from the main module base") == 1, "inconsistent base rejected");
 		EXPECT(Det::attached_address == 0, "no detour attached");
 	}
+	else if (scenario == "update") {
+		std::printf("scenario update (default hook target, no .ini at all)\n");
+		typedef CitizenUpdate_detour UDet;
+		struct Rec { Simulator::cCreatureCitizen* self; int dt; };
+		static std::vector<Rec> origCalls;
+		struct Orig { static void Fn(Simulator::cCreatureCitizen* self, int dt) { origCalls.push_back({ self, dt }); } };
+		UDet::test_original = Orig::Fn;
+		ChiefObserver::Attach(nullptr);
+		ChiefObserver::Initialize();
+		std::string log = ReadFile(kLog);
+		EXPECT(Count(log, "hook_target: update") == 1, "default hook target is cCreatureCitizen::Update");
+		EXPECT(UDet::attached_address == baseAddress + 0x1000, "detour attached at the ModAPI table address (base + offset)");
+		EXPECT(Det::attached_address == 0, "the ForwardWalkTree thunk is NOT hooked");
+		EXPECT(Count(log, "DetourAttach OK on cCreatureCitizen::Update") == 1, "attach logged");
+		EXPECT(Count(log, "first bytes of cCreatureCitizen::Update") == 1, "bytes recorded in the log");
+
+		Simulator::cGameNounManager* mgr = Simulator::cGameNounManager::Get();
+		Simulator::cTribe tribe;
+		Simulator::cCreatureCitizen chief, other1, other2;
+		tribe.mpLeader.p = static_cast<Simulator::cCreatureBase*>(&chief);
+		mgr->mpPlayerTribe = &tribe;
+		std::vector<Rec> expected;
+		auto Upd = [&](Simulator::cCreatureCitizen* c, int dt) { UDet::detoured_function(c, dt); expected.push_back({ c, dt }); };
+		Win().tick = 1000;
+		for (int i = 0; i < 100; ++i) { Upd(&other1, 16); Upd(&other2, 17); Upd(&chief, 16); }
+		log = ReadFile(kLog);
+		EXPECT(origCalls.size() == 300, "original Update executed on every call (300/300)");
+		bool same = origCalls.size() == expected.size();
+		for (size_t i = 0; same && i < origCalls.size(); ++i) same = origCalls[i].self == expected[i].self && origCalls[i].dt == expected[i].dt;
+		EXPECT(same, "original received the same object and delta time every time");
+		EXPECT(Count(log, "CHIEF_DETECTED") == 1, "chief detected once");
+		EXPECT(Count(log, "matchRaw=0 matchCitizen=1") == 1, "the citizen pointer matches (this is a cCreatureCitizen*)");
+		EXPECT(Count(log, "MISMATCH rawLeader") == 1, "raw vs citizen pointer difference reported once");
+		EXPECT(Count(log, "TRIBE appeared") == 1 && Count(log, "LEADER appeared") == 1, "tribe and leader appearance logged");
+		Win().tick = 12000;
+		Upd(&other1, 16);
+		log = ReadFile(kLog);
+		EXPECT(Count(log, "STATS hook=update calls=301") == 1, "statistics carry the hook name and counts");
+		EXPECT(Count(log, "chiefCalls=100") == 1 && Count(log, "otherCreatures=201") == 1, "chief and other citizens counted separately");
+		// Entering Tribal directly = tribe appears later: simulate "no tribe yet" then tribe.
+		mgr->mpPlayerTribe = nullptr;
+		Upd(&chief, 16);
+		log = ReadFile(kLog);
+		EXPECT(Count(log, "TRIBE disappeared") == 1, "tribe loss logged");
+		EXPECT(origCalls.size() == expected.size(), "original still executed without a tribe");
+	}
 	else if (scenario == "verified" || scenario == "budget") {
 		const bool budget = scenario == "budget";
 		std::printf("scenario %s\n", scenario.c_str());
-		WriteIni("thunk_address=0x00401000\nexpected_bytes=" + FakeThunkHex(20) + "\nstats_interval_ms=10000\n" +
+		WriteIni("hook_target=thunk\nthunk_address=0x00401000\nexpected_bytes=" + FakeThunkHex(20) + "\nstats_interval_ms=10000\n" +
 			(budget ? "max_event_lines=6\n" : ""));
 		ChiefObserver::Attach(nullptr);
 		ChiefObserver::Initialize();
@@ -159,7 +206,7 @@ int main(int argc, char** argv)
 			Win().tick = 12000;
 			Call(chief1Raw);
 			log = ReadFile(kLog);
-			EXPECT(Count(log, "STATS calls=251") == 1, "periodic statistics after the interval");
+			EXPECT(Count(log, "STATS hook=thunk calls=251") == 1, "periodic statistics after the interval");
 			EXPECT(Count(log, "chiefCalls=201") == 1, "statistics count chief calls");
 			EXPECT(Count(log, "otherCreatures=50") == 1, "statistics count other creatures");
 
@@ -205,7 +252,7 @@ int main(int argc, char** argv)
 			EXPECT(Count(ReadFile(kLog), "MODE_ENTER id=0x01654C02 previous=0x01654C01") == 1, "mode enter logged");
 
 			ChiefObserver::Dispose();
-			EXPECT(Count(ReadFile(kLog), "FINAL calls=") == 1, "final statistics written");
+			EXPECT(Count(ReadFile(kLog), "FINAL hook=thunk calls=") == 1, "final statistics written");
 			std::printf("  total log lines: %d\n", Count(ReadFile(kLog), "\n"));
 		}
 		else {

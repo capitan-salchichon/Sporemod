@@ -1,8 +1,8 @@
 # TribalChiefObserver — Prototipo 0.1
 
-Mod de Spore (Spore ModAPI) que **solo observa**: engancha `ForwardWalkTree`, toma su cuarto argumento
-(la criatura que ejecuta el árbol de comportamiento), obtiene el cacique de la tribu del jugador y escribe en un log
-si ambos son el mismo objeto. **No** omite `WalkTree`, no toca árboles, órdenes, locomoción, animaciones ni partidas,
+Mod de Spore (Spore ModAPI) que **solo observa**: engancha la actualización de cada ciudadano (`cCreatureCitizen::Update`,
+con la dirección que ModAPI ya trae; opcionalmente `ForwardWalkTree`), obtiene el cacique de la tribu del jugador y
+escribe en un log si el ciudadano que se actualiza es el cacique. **No** omite `WalkTree`, no toca árboles, órdenes, locomoción, animaciones ni partidas,
 y no usa `SetAvatar`.
 
 ## Estado honesto de esta entrega
@@ -14,7 +14,8 @@ y no usa `SetAvatar`.
 | Compilación a objeto con clang (x86, Windows) contra los headers **reales** de ModAPI | **Realizada**: los 3 `.cpp` generan `.o` sin errores ni avisos propios (`tests/clang_compile_check.sh`; ajustes solo en copias temporales, listados en el script) |
 | Compilación y enlazado con **MSVC** (GitHub Actions, `windows-2022`, VS 2022, MSVC 14.44.35207) | **Realizada**: SDK de ModAPI construido, mod compilado y enlazado con 0 errores y sin avisos del compilador en mis archivos; `TribalChiefObserver.dll` x86 de 56 832 bytes (`build/` y release `ci-4` del repositorio) |
 | Pruebas unitarias de `ObserverCore.h` compiladas con MSVC | **51 comprobaciones, 0 fallos** |
-| Dirección real de `ForwardWalkTree` en tu ejecutable | **NO verificada** (ver más abajo) |
+| Dirección de `cCreatureCitizen::Update` (modo predeterminado) | La da la tabla de ModAPI; **no verificada por mí** en ejecución |
+| Dirección real de `ForwardWalkTree` (solo modo `thunk`) | **NO verificada** (ver más abajo) |
 | Ejecución dentro de Spore | **NO realizada** |
 
 Lo que la simulación y la compilación NO demuestran: que el hook funcione en el ejecutable real o que el puntero del cacique
@@ -39,8 +40,12 @@ desde la estructura de la plantilla oficial. Si ya tienes uno, hay que integrar 
 ## Cómo funciona
 
 1. `AttachDetours()` (dentro de `DllMain`, como exige la documentación de ModAPI) llama a `ChiefObserver::Attach`.
-2. `Attach` lee `TribalChiefObserver.ini`. **Si no hay `thunk_address` o los bytes no coinciden, no instala nada** ("modo sonda").
-3. Si la verificación pasa, instala `static_detour` sobre `ForwardWalkTree`
+2. `Attach` lee `TribalChiefObserver.ini` (opcional). `hook_target` elige qué se engancha:
+   - **`update` (predeterminado):** `cCreatureCitizen::Update`, con la dirección de la tabla de ModAPI para los ejecutables
+     que soporta (disco y Steam de marzo de 2017). **No hay que configurar ninguna dirección.** `this` es el ciudadano.
+   - `thunk`: `ForwardWalkTree`, solo si `thunk_address` y `expected_bytes` verifican (ver más abajo).
+   - `none`: no instala nada (modo sonda).
+3. Con `thunk`, si la verificación pasa, instala `static_detour` sobre `ForwardWalkTree`
    (`void __cdecl (float, double, void*, void*, void*, void*, void*, void*)`; firma tomada del símbolo
    `?ForwardWalkTree@@YAXMNPAX00000@Z`, entrada byte-exacta del decomp). Un `static_assert` falla la compilación si
    el proyecto no usa `__cdecl` por defecto.
@@ -57,7 +62,7 @@ desde la estructura de la plantilla oficial. Si ya tienes uno, hay que integrar 
 imagen enlazada en 0x400000 (la que muestran Ghidra/IDA). El mod comprueba además que `baseAddress` de ModAPI coincide con
 la base real del módulo, que la dirección cae dentro de la imagen y que es memoria ejecutable legible.
 
-## Cómo verificar la dirección del thunk (obligatorio antes de instalar el hook)
+## Cómo verificar la dirección del thunk (solo para `hook_target=thunk`)
 
 La dirección del decomp (0x00D995F0) pertenece a otra versión de `SporeApp.exe`. El SDK de ModAPI que revisé solo trae
 direcciones para el ejecutable de disco y el de Steam de marzo de 2017, y ModAPI no declara `ForwardWalkTree`. El
@@ -81,8 +86,9 @@ Procedimiento sugerido (requiere abrir tu ejecutable en Ghidra, x32dbg o similar
 1. Compilar `TribalChiefObserver.vcxproj` (Visual Studio 2022, `v143`, Win32) con el ModAPI SDK instalado. Hace falta el
    archivo `SdkPathConfig.props` en la carpeta del proyecto (lo genera el instalador del SDK; cópialo de otro proyecto ModAPI).
 2. Copiar `TribalChiefObserver.dll` a `mLibs` del ModAPI Launcher y `TribalChiefObserver.ini.example` como `TribalChiefObserver.ini`.
-3. Primera ejecución sin dirección: debe aparecer `PROBE MODE` en `TribalChiefObserver.log` (junto a la DLL).
-4. Completar `thunk_address` y `expected_bytes` y volver a ejecutar.
+3. Ejecutar Spore: no hace falta configurar nada. En `TribalChiefObserver.log` (junto a la DLL) debe aparecer
+   `DetourAttach OK on cCreatureCitizen::Update`. Si el log dice `ABORT`, copia ese mensaje.
+4. (Opcional) `hook_target=thunk` para enganchar `ForwardWalkTree`: completar `thunk_address` y `expected_bytes`.
 
 ## Qué aparece en el log
 

@@ -32,9 +32,23 @@ namespace
 	// ---------------------------------------------------------------------------------------------
 	// Configuration (TribalChiefObserver.ini, next to this DLL)
 	// ---------------------------------------------------------------------------------------------
+	enum class HookTarget { None, Update, Thunk };
+
+	const char* HookTargetName(HookTarget t)
+	{
+		switch (t) {
+		case HookTarget::None: return "none";
+		case HookTarget::Update: return "update";
+		case HookTarget::Thunk: return "thunk";
+		}
+		return "?";
+	}
+
 	struct Config
 	{
 		bool iniFound = false;
+		HookTarget hookTarget = HookTarget::Update;   // default: ModAPI-provided address of cCreatureCitizen::Update
+		std::string hookTargetText;
 		uint32_t thunkVA = 0;                 // VA of ForwardWalkTree in the TARGET exe, image base 0x400000 (as shown by Ghidra/IDA)
 		std::vector<uint8_t> expectedBytes;   // first bytes of the thunk, supplied by the user after checking the exe
 		uint32_t probeBytes = 32;             // bytes dumped to the log for manual verification (0..64)
@@ -127,6 +141,13 @@ namespace
 		gCfg.probeBytes = (uint32_t)GetPrivateProfileIntA("Observer", "probe_bytes", 32, gCfg.iniPath.c_str());
 		if (gCfg.probeBytes > 64) gCfg.probeBytes = 64;
 
+		gCfg.hookTargetText = ReadIniString("hook_target", "update");
+		std::string t = gCfg.hookTargetText;
+		for (size_t i = 0; i < t.size(); ++i) if (t[i] >= 'A' && t[i] <= 'Z') t[i] = (char)(t[i] - 'A' + 'a');
+		if (t == "update") gCfg.hookTarget = HookTarget::Update;
+		else if (t == "thunk") gCfg.hookTarget = HookTarget::Thunk;
+		else gCfg.hookTarget = HookTarget::None;   // "none" or anything unrecognized: install nothing
+
 		uint32_t va = 0;
 		if (tco::ParseAddress(ReadIniString("thunk_address", ""), va)) gCfg.thunkVA = va;
 		tco::ParseHexBytes(ReadIniString("expected_bytes", ""), gCfg.expectedBytes);
@@ -187,9 +208,9 @@ namespace
 	void PeriodicStats(const char* tag)
 	{
 		const uint32_t others = gStats.calls - gStats.chiefCalls;
-		Log("%s calls=%u (+%u this window) chiefCalls=%u (+%u) otherCreatures=%u tribeUnavailable=%u leaderUnavailable=%u "
+		Log("%s hook=%s calls=%u (+%u this window) chiefCalls=%u (+%u) otherCreatures=%u tribeUnavailable=%u leaderUnavailable=%u "
 			"rawVsCitizenMismatch=%u | tribe=%s rawLeader=%s citizenLeader=%s | suppressedEventLines=%u",
-			tag, gStats.calls, gStats.windowCalls, gStats.chiefCalls, gStats.windowChiefCalls, others,
+			tag, HookTargetName(gCfg.hookTarget), gStats.calls, gStats.windowCalls, gStats.chiefCalls, gStats.windowChiefCalls, others,
 			gStats.tribeUnavailable, gStats.leaderUnavailable, gStats.rawCitizenMismatch,
 			tco::FormatPtr(gLastInput.tribe).c_str(), tco::FormatPtr(gLastInput.rawLeader).c_str(),
 			tco::FormatPtr(gLastInput.citizenLeader).c_str(), gEvents.Suppressed());
@@ -304,6 +325,21 @@ void ForwardWalkTree_detour::DETOUR(float f, double t, void* a3, void* creature,
 }
 
 // -------------------------------------------------------------------------------------------------
+// Alternative (default) hook target: cCreatureCitizen::Update.
+// ModAPI declares its address for the executables it supports (Simulator::cCreatureCitizen_addresses::Update),
+// so no manual address is needed. `this` is the citizen being updated, i.e. the same object that
+// cSPCreatureCitizen::Update later passes as 4th argument of ForwardWalkTree.
+// Same safety contract: the original is always executed with the original arguments.
+// -------------------------------------------------------------------------------------------------
+member_detour(CitizenUpdate_detour, Simulator::cCreatureCitizen, void(int)) {};
+
+void CitizenUpdate_detour::DETOUR(int deltaTime)
+{
+	ObserveSafely((void*)this);
+	original_function(this, deltaTime);
+}
+
+// -------------------------------------------------------------------------------------------------
 // Game mode logger (scenarios E and F: leaving the Tribal stage, loading a game)
 // -------------------------------------------------------------------------------------------------
 class ModeLogListener
@@ -331,38 +367,30 @@ public:
 // -------------------------------------------------------------------------------------------------
 // Public entry points
 // -------------------------------------------------------------------------------------------------
-namespace ChiefObserver
+namespace
 {
-	void Attach(HMODULE module)
+	void AttachUpdateTarget(const ImageInfo& img)
 	{
-		gModule = module;
-		InitializeCriticalSection(&gLogCS);
-		gLogCSReady = true;
+		const uintptr_t addr = GetAddress(Simulator::cCreatureCitizen, Update);
+		Log("cCreatureCitizen::Update: address from the ModAPI table = %s (module base %s + 0x%X)",
+			tco::FormatPtr(addr).c_str(), tco::FormatPtr(img.base).c_str(), (unsigned)(addr - img.base));
+		const size_t probeLen = 32;
+		if (!(addr >= img.base && addr + probeLen <= img.base + img.size)) { Log("ABORT: that address is outside the main module image. No detour installed."); return; }
+		if (!IsReadableExecutable((const void*)addr, probeLen)) { Log("ABORT: that address is not readable executable memory. No detour installed."); return; }
+		Log("first bytes of cCreatureCitizen::Update (for the record): %s", tco::BytesToHex((const uint8_t*)addr, 16).c_str());
 
-		LoadConfig(module);
-		gEvents = tco::EventBudget(gCfg.maxEventLines);
-		gGate = tco::IntervalGate(gCfg.statsIntervalMs);
-		OpenLog();
+		const LONG rc = CitizenUpdate_detour::attach((UINT)addr);
+		if (rc != NO_ERROR) { Log("DetourAttach FAILED (error %ld). No detour installed.", (long)rc); return; }
+		gHookAttached = true;
+		Log("DetourAttach OK on cCreatureCitizen::Update: the observer will be active once CommitDetours() succeeds.");
+	}
 
-		Log("=== TribalChiefObserver prototype 0.1 (observer only) ===");
-		Log("config file: %s (%s)", gCfg.iniPath.c_str(), gCfg.iniFound ? "found" : "NOT found");
-		Log("log file: %s", gCfg.logPath.c_str());
-
-		const ImageInfo img = GetMainImageInfo();
-		Log("main module: base=%s size=0x%X preferredBase=%s | ModAPI baseAddress=%s",
-			tco::FormatPtr(img.base).c_str(), (unsigned)img.size, tco::FormatPtr(img.preferredBase).c_str(), tco::FormatPtr(baseAddress).c_str());
-
+	void AttachThunkTarget(const ImageInfo& img)
+	{
 		if (gCfg.thunkVA == 0) {
-			Log("PROBE MODE: thunk_address is not configured, so NO detour is installed. See README.md to locate and verify ForwardWalkTree in your executable.");
+			Log("PROBE MODE: hook_target=thunk but thunk_address is not configured, so NO detour is installed. See README.md.");
 			return;
 		}
-		if (!img.ok) { Log("ABORT: cannot read the main module headers. No detour installed."); return; }
-		if (baseAddress != img.base) {
-			Log("ABORT: ModAPI baseAddress (%s) differs from the main module base (%s). No detour installed.",
-				tco::FormatPtr(baseAddress).c_str(), tco::FormatPtr(img.base).c_str());
-			return;
-		}
-
 		// Same convention as ModAPI's Address(): the configured value is a VA of the image linked at 0x400000.
 		const uintptr_t runtimeAddr = img.base + gCfg.thunkVA - kPreferredImageBase;
 		Log("thunk_address (VA @0x400000)=%s -> runtime address=%s", tco::FormatPtr(gCfg.thunkVA).c_str(), tco::FormatPtr(runtimeAddr).c_str());
@@ -387,7 +415,45 @@ namespace ChiefObserver
 		const LONG rc = ForwardWalkTree_detour::attach((UINT)runtimeAddr);
 		if (rc != NO_ERROR) { Log("DetourAttach FAILED (error %ld). No detour installed.", (long)rc); return; }
 		gHookAttached = true;
-		Log("DetourAttach OK: the observer will be active once CommitDetours() succeeds.");
+		Log("DetourAttach OK on ForwardWalkTree: the observer will be active once CommitDetours() succeeds.");
+	}
+}
+
+namespace ChiefObserver
+{
+	void Attach(HMODULE module)
+	{
+		gModule = module;
+		InitializeCriticalSection(&gLogCS);
+		gLogCSReady = true;
+
+		LoadConfig(module);
+		gEvents = tco::EventBudget(gCfg.maxEventLines);
+		gGate = tco::IntervalGate(gCfg.statsIntervalMs);
+		OpenLog();
+
+		Log("=== TribalChiefObserver prototype 0.1 (observer only) ===");
+		Log("config file: %s (%s)", gCfg.iniPath.c_str(), gCfg.iniFound ? "found" : "NOT found");
+		Log("log file: %s", gCfg.logPath.c_str());
+		Log("hook_target: %s%s", HookTargetName(gCfg.hookTarget), (gCfg.hookTarget == HookTarget::None && gCfg.hookTargetText != "none") ? " (value not recognized)" : "");
+
+		const ImageInfo img = GetMainImageInfo();
+		Log("main module: base=%s size=0x%X preferredBase=%s | ModAPI baseAddress=%s",
+			tco::FormatPtr(img.base).c_str(), (unsigned)img.size, tco::FormatPtr(img.preferredBase).c_str(), tco::FormatPtr(baseAddress).c_str());
+
+		if (gCfg.hookTarget == HookTarget::None) {
+			Log("PROBE MODE: hook_target=none, so NO detour is installed.");
+			return;
+		}
+		if (!img.ok) { Log("ABORT: cannot read the main module headers. No detour installed."); return; }
+		if (baseAddress != img.base) {
+			Log("ABORT: ModAPI baseAddress (%s) differs from the main module base (%s). No detour installed.",
+				tco::FormatPtr(baseAddress).c_str(), tco::FormatPtr(img.base).c_str());
+			return;
+		}
+
+		if (gCfg.hookTarget == HookTarget::Update) AttachUpdateTarget(img);
+		else AttachThunkTarget(img);
 	}
 
 	void Initialize()

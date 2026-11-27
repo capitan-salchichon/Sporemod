@@ -145,6 +145,27 @@ template <class D, class R, class... P> typename static_detour_<D, R(P...)>::det
 template <class D, class R, class... P> uintptr_t static_detour_<D, R(P...)>::attached_address = 0;
 #define static_detour(name, declaration) struct name : public static_detour_<name, declaration>
 
+
+// member_detour (used by the cCreatureCitizen::Update hook) and the ModAPI address table access macros
+template <class D, class Base, class Virt, class Sig> struct member_detour_;
+template <class D, class Base, class Virt, class R, class... P>
+struct member_detour_<D, Base, Virt, R(P...)> : public Base {
+	typedef R (*detour_pointer)(Virt*, P...);
+	static detour_pointer original_function;
+	static detour_pointer test_original;            // harness only
+	static uintptr_t attached_address;              // harness only
+	static R detoured_function(Virt* object, P... args) { return ((D*)object)->detoured(args...); }
+	R detoured(P...);
+	static LONG attach(UINT function_address) { attached_address = function_address; original_function = test_original; return 0; }
+};
+template <class D, class B, class V, class R, class... P> typename member_detour_<D, B, V, R(P...)>::detour_pointer member_detour_<D, B, V, R(P...)>::original_function = nullptr;
+template <class D, class B, class V, class R, class... P> typename member_detour_<D, B, V, R(P...)>::detour_pointer member_detour_<D, B, V, R(P...)>::test_original = nullptr;
+template <class D, class B, class V, class R, class... P> uintptr_t member_detour_<D, B, V, R(P...)>::attached_address = 0;
+#define member_detour(name, baseClass, declaration) struct name : public member_detour_<name, baseClass, baseClass, declaration>
+#define Addresses(name) name##_addresses
+#define GetAddress(namespaceName, name) (Addresses(namespaceName)::name + baseAddress)
+namespace Simulator { namespace cCreatureCitizen_addresses { const uintptr_t Update = 0x1000; } }   // offset from the module base
+
 template <class T> struct mock_intrusive_ptr { T* p = nullptr; T* get() const { return p; } };
 
 namespace Simulator {
