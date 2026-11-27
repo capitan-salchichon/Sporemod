@@ -1,0 +1,80 @@
+         ..\dll\SimulatorMessages.obj
+         ..\dll\EditorPalettes.obj
+         ..\dll\FixedPoolAllocator.obj
+         ..\dll\Lighting.obj
+         ..\dll\Materials.obj
+         ..\dll\Models.obj
+         ..\dll\Rendering.obj
+         ..\dll\Textures.obj
+         ..\dll\IODefinitions.obj
+         ..\dll\ResourceManager.obj
+         ..\dll\StreamDefinitions.obj
+         ..\dll\ThreadedObject.obj
+         ..\dll\XML.obj
+         ..\dll\LocalizedString.obj
+         ..\dll\Mutex.obj
+         ..\dll\RWBuffers.obj
+         ..\dll\RWSkeleton.obj
+         ..\dll\GameNounManager.obj
+         ..\dll\SimulatorMisc.obj
+         ..\dll\SimulatorSpaceGame.obj
+         ..\dll\SimulatorSystem.obj
+         ..\dll\cStarRecord.obj
+         ..\dll\SolarSystem.obj
+         ..\dll\SpaceInventory.obj
+         ..\dll\SpacePlayerData.obj
+         ..\dll\StarManager.obj
+         ..\dll\Terraforming.obj
+         ..\dll\ToolManager.obj
+         ..\dll\Tools.obj
+         ..\dll\UIEventLog.obj
+         ..\dll\Skinner.obj
+         ..\dll\Assetbrowser.obj
+         ..\dll\AssetData.obj
+         ..\dll\Shopper.obj
+         ..\dll\CertStream.obj
+         ..\dll\Effects.obj
+         ..\dll\SwarmManager.obj
+         ..\dll\Clock.obj
+         ..\dll\Terrain.obj
+         ..\dll\cSPUIPropertyLayout.obj
+         ..\dll\HintManager.obj
+         ..\dll\LayerManager.obj
+         ..\dll\ScrollFrame.obj
+         ..\dll\cSPUITextZoom.obj
+         ..\dll\SpaceGameUI.obj
+         ..\dll\UI.obj
+         ..\dll\Cursors.obj
+         ..\dll\Defaults.obj
+         ..\dll\Drawables.obj
+         ..\dll\Events.obj
+         ..\dll\Graphics2D.obj
+         ..\dll\Image.obj
+         ..\dll\Interactives.obj
+         ..\dll\OutlineFormat.obj
+         ..\dll\Tooltips.obj
+         ..\dll\UIEffects.obj
+         ..\dll\UILayout.obj
+         ..\dll\UTFWinAllocator.obj
+         ..\dll\LayoutElements.obj
+         ..\dll\UISerialization.obj
+         ..\dll\Window.obj
+         ..\dll\ArgScript.obj
+         ..\dll\Math.obj
+         ..\dll\Object.obj
+         ..\dll\ResourceKey.obj
+         ..\dll\WindowManager.obj
+         ..\dll\cSpeciesRelationshipManager.obj
+            Creating library ..\dll\Release\SporeModAPI.lib and object ..\dll\Release\SporeModAPI.exp
+         LINK : /LTCG specified but no code generation required; remove /LTCG from the link command line to improve linker performance
+         Spore ModAPI.vcxproj -> D:\a\Sporemod\Sporemod\sdk\dll\Release\SporeModAPI.dll
+       FinalizeBuildStatus:
+         Deleting file "..\dll\Spore ModAPI.tlog\unsuccessfulbuild".
+         Touching "..\dll\Spore ModAPI.tlog\Spore ModAPI.lastbuildstate".
+     1>Done Building Project "D:\a\Sporemod\Sporemod\sdk\Spore ModAPI\Spore ModAPI.vcxproj" (default targets).
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:16.94

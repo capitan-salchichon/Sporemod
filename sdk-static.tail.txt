@@ -1,0 +1,80 @@
+         ..\lib\SimulatorCell.obj
+         ..\lib\SimulatorClock.obj
+         ..\lib\SimulatorMessages.obj
+         ..\lib\EditorPalettes.obj
+         ..\lib\FixedPoolAllocator.obj
+         ..\lib\Lighting.obj
+         ..\lib\Materials.obj
+         ..\lib\Models.obj
+         ..\lib\Rendering.obj
+         ..\lib\Textures.obj
+         ..\lib\IODefinitions.obj
+         ..\lib\ResourceManager.obj
+         ..\lib\StreamDefinitions.obj
+         ..\lib\ThreadedObject.obj
+         ..\lib\XML.obj
+         ..\lib\LocalizedString.obj
+         ..\lib\Mutex.obj
+         ..\lib\RWBuffers.obj
+         ..\lib\RWSkeleton.obj
+         ..\lib\GameNounManager.obj
+         ..\lib\SimulatorMisc.obj
+         ..\lib\SimulatorSpaceGame.obj
+         ..\lib\SimulatorSystem.obj
+         ..\lib\cStarRecord.obj
+         ..\lib\SolarSystem.obj
+         ..\lib\SpaceInventory.obj
+         ..\lib\SpacePlayerData.obj
+         ..\lib\StarManager.obj
+         ..\lib\Terraforming.obj
+         ..\lib\ToolManager.obj
+         ..\lib\Tools.obj
+         ..\lib\UIEventLog.obj
+         ..\lib\Skinner.obj
+         ..\lib\Assetbrowser.obj
+         ..\lib\AssetData.obj
+         ..\lib\Shopper.obj
+         ..\lib\CertStream.obj
+         ..\lib\Effects.obj
+         ..\lib\SwarmManager.obj
+         ..\lib\Clock.obj
+         ..\lib\Terrain.obj
+         ..\lib\cSPUIPropertyLayout.obj
+         ..\lib\HintManager.obj
+         ..\lib\LayerManager.obj
+         ..\lib\ScrollFrame.obj
+         ..\lib\cSPUITextZoom.obj
+         ..\lib\SpaceGameUI.obj
+         ..\lib\UI.obj
+         ..\lib\Cursors.obj
+         ..\lib\Defaults.obj
+         ..\lib\Drawables.obj
+         ..\lib\Events.obj
+         ..\lib\Graphics2D.obj
+         ..\lib\Image.obj
+         ..\lib\Interactives.obj
+         ..\lib\OutlineFormat.obj
+         ..\lib\Tooltips.obj
+         ..\lib\UIEffects.obj
+         ..\lib\UILayout.obj
+         ..\lib\UTFWinAllocator.obj
+         ..\lib\LayoutElements.obj
+         ..\lib\UISerialization.obj
+         ..\lib\Window.obj
+         ..\lib\ArgScript.obj
+         ..\lib\Math.obj
+         ..\lib\Object.obj
+         ..\lib\ResourceKey.obj
+         ..\lib\WindowManager.obj
+         ..\lib\cSpeciesRelationshipManager.obj
+         Spore ModAPI.vcxproj -> D:\a\Sporemod\Sporemod\sdk\lib\Release\SporeModAPIBase.lib
+       FinalizeBuildStatus:
+         Deleting file "..\lib\Spore ModAPI.tlog\unsuccessfulbuild".
+         Touching "..\lib\Spore ModAPI.tlog\Spore ModAPI.lastbuildstate".
+     1>Done Building Project "D:\a\Sporemod\Sporemod\sdk\Spore ModAPI\Spore ModAPI.vcxproj" (default targets).
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:43.16
